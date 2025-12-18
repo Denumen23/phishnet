@@ -1,0 +1,11 @@
+fastapi
+uvicorn
+playwright
+python-dotenv
+beautifulsoup4
+opencv-python-headless
+numpy
+Pillow
+pytest
+pytest-asyncio
+httpx
