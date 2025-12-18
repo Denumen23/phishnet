@@ -3,6 +3,7 @@ from pydantic import BaseModel
 from app.services.fetch import get_html, get_screenshot
 from app.services.logo_matcher import find_logo
 from app.services.llm import extract_text_from_html, is_credential_page_llm, identify_brand_llm
+from app.services.brand_normalizer import brand_normalizer
 import os
 import tempfile
 
@@ -13,12 +14,14 @@ class AnalyzeRequest(BaseModel):
 
 class LLMAnalysis(BaseModel):
     is_credential_page: bool
-    identified_brand: str | None
+    identified_brand_alias: str | None
+    canonical_brand: str | None
 
 class AnalyzeResponse(BaseModel):
     url: str
     phishing_score: float
-    matched_brand_logo: str | None
+    matched_brand_logo_alias: str | None
+    canonical_brand_logo: str | None
     llm_analysis: LLMAnalysis
 
 @router.post("/analyze", response_model=AnalyzeResponse)
@@ -43,31 +46,35 @@ async def analyze_url(request: AnalyzeRequest):
         is_crp = await is_credential_page_llm(text)
 
         score = 0
-        identified_brand_by_llm = None
+        identified_brand_alias = None
+        canonical_brand_llm = None
 
         if is_crp:
-            # If it's a credential page, it's inherently more suspicious
             score += 40
-            identified_brand_by_llm = await identify_brand_llm(text)
-            if identified_brand_by_llm:
-                # Impersonating a specific brand is a strong phishing signal
-                score += 50
+            identified_brand_alias = await identify_brand_llm(text)
+            if identified_brand_alias:
+                canonical_brand_llm = brand_normalizer.normalize_brand(identified_brand_alias)
+                if canonical_brand_llm:
+                    score += 50
 
-        matched_brand_logo = find_logo(screenshot_path)
-        if matched_brand_logo:
-            # Finding a logo of a known brand increases the score
-            score += 10
-            # A small bonus if the logo and text agree
-            if identified_brand_by_llm and matched_brand_logo.lower() in identified_brand_by_llm.lower():
+        matched_brand_logo_alias = find_logo(screenshot_path)
+        canonical_brand_logo = None
+        if matched_brand_logo_alias:
+            canonical_brand_logo = brand_normalizer.normalize_brand(matched_brand_logo_alias)
+            if canonical_brand_logo:
                 score += 10
+                if canonical_brand_llm and canonical_brand_logo == canonical_brand_llm:
+                    score += 10
 
         return AnalyzeResponse(
             url=url,
             phishing_score=min(score, 100),
-            matched_brand_logo=matched_brand_logo,
+            matched_brand_logo_alias=matched_brand_logo_alias,
+            canonical_brand_logo=canonical_brand_logo,
             llm_analysis=LLMAnalysis(
                 is_credential_page=is_crp,
-                identified_brand=identified_brand_by_llm
+                identified_brand_alias=identified_brand_alias,
+                canonical_brand=canonical_brand_llm
             )
         )
     finally:

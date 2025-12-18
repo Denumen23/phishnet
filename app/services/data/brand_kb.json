@@ -1,0 +1,17 @@
+[
+  {
+    "name": "Google",
+    "domains": ["google.com", "youtube.com"],
+    "aliases": ["Google", "Alphabet", "Gmail", "Google LLC"]
+  },
+  {
+    "name": "Microsoft",
+    "domains": ["microsoft.com", "live.com", "office.com"],
+    "aliases": ["Microsoft", "MS", "Microsoft Inc.", "Office 365", "MSFT"]
+  },
+  {
+    "name": "Amazon",
+    "domains": ["amazon.com"],
+    "aliases": ["Amazon", "Amazon.com", "AWS", "Amazon Web Services"]
+  }
+]
