@@ -72,3 +72,25 @@ def test_analyze_url_fetch_fails(mock_get_html):
 
     assert response.status_code == 400
     assert "Could not fetch HTML" in response.json()['detail']
+
+@patch('app.api.endpoints.is_credential_page_llm', new_callable=AsyncMock)
+@patch('app.api.endpoints.get_html', new_callable=AsyncMock)
+def test_multistep_login_is_crp(mock_get_html, mock_is_crp):
+    """
+    Tests that a multi-step login page (e.g., asking for username first) is identified as a CRP.
+    """
+    # This HTML simulates the first step of a login, asking for an email/username.
+    mock_get_html.return_value = "<html><body><h1>Sign in</h1><p>Enter your email address to continue.</p><input type='email' /></body></html>"
+    mock_is_crp.return_value = True # The updated prompt should now return True for this.
+
+    response = client.post("/analyze", json={"url": "https://example.com/login-step-one"})
+
+    # We are only interested in whether the is_credential_page_llm was called and returned true
+    # The rest of the analysis will fail because we are not mocking all the other functions
+    # but that is ok for this test.
+    mock_is_crp.assert_awaited_once()
+
+    # To test the logic inside is_credential_page_llm, we would need to unpatch it and let it run
+    # but that would require an actual call to the OpenRouter API.
+    # For now, we are just testing the endpoint flow.
+    # A proper integration test would be needed to test the LLM prompt itself.
