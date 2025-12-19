@@ -1,6 +1,6 @@
 import httpx
 from bs4 import BeautifulSoup
-from app.core.config import OPENROUTER_API_KEY
+from app.core.config import OPENROUTER_API_KEY, OPENROUTER_MODEL_NAME
 import json
 import asyncio
 
@@ -24,13 +24,12 @@ async def _query_openrouter(messages: list) -> dict:
     if not OPENROUTER_API_KEY or OPENROUTER_API_KEY == "YOUR_API_KEY_HERE":
         return {"status": "error", "message": "OpenRouter API key not configured."}
 
-    model = "mistralai/mistral-7b-instruct:free"
     async with httpx.AsyncClient() as client:
         try:
             response = await client.post(
                 url="https://openrouter.ai/api/v1/chat/completions",
                 headers={"Authorization": f"Bearer {OPENROUTER_API_KEY}", "Content-Type": "application/json"},
-                json={"model": model, "messages": messages}
+                json={"model": OPENROUTER_MODEL_NAME, "messages": messages}
             )
             response.raise_for_status()
 
