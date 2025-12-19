@@ -94,3 +94,38 @@ def test_multistep_login_is_crp(mock_get_html, mock_is_crp):
     # but that would require an actual call to the OpenRouter API.
     # For now, we are just testing the endpoint flow.
     # A proper integration test would be needed to test the LLM prompt itself.
+
+@patch('app.api.endpoints.is_credential_page_llm', new_callable=AsyncMock)
+@patch('app.api.endpoints.get_html', new_callable=AsyncMock)
+def test_complex_login_page_is_crp(mock_get_html, mock_is_crp):
+    """
+    Tests that a complex login page with distracting text is still identified as a CRP.
+    """
+    # This HTML simulates a noisy login page with promotional content.
+    mock_get_html.return_value = """
+    <html>
+        <body>
+            <header>
+                <h1>My Store</h1>
+                <nav>Home | Products | Sale</nav>
+            </header>
+            <main>
+                <h2>Weekend Sale! 50% off!</h2>
+                <form>
+                    <h3>Login to your account</h3>
+                    <label>Email:</label>
+                    <input type="email" />
+                    <button>Continue</button>
+                </form>
+            </main>
+            <footer>
+                <p>About Us | Contact | FAQ</p>
+            </footer>
+        </body>
+    </html>
+    """
+    mock_is_crp.return_value = True  # The refined prompt should identify this as a CRP.
+
+    response = client.post("/analyze", json={"url": "https://example.com/complex-login"})
+
+    mock_is_crp.assert_awaited_once()

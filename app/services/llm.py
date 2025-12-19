@@ -50,7 +50,7 @@ async def is_credential_page_llm(text: str) -> bool:
     Determines if the text content suggests a credential-requiring page (CRP).
     """
     messages = [
-        {"role": "system", "content": "You are a cybersecurity assistant. Analyze the following text from a webpage. Your task is to determine if it is a credential-requiring page (CRP). A CRP is a login page, a sign-in form, or any page that asks for user credentials. This includes pages that explicitly ask for a password, security code, or other sensitive information. Importantly, it also includes the first step of a multi-step login process, where a user is prompted to enter an identifier like a username, email address, or phone number, even if a password field is not yet visible. Respond with a JSON object with a single boolean key: 'is_credential_page'."},
+        {"role": "system", "content": "You are a cybersecurity assistant. Your task is to determine if the provided webpage text indicates a credential-requiring page (CRP). A CRP is a login form, a sign-in page, or any page that requests user credentials. Focus on identifying the core user intent of the page. Even if the page contains distracting elements like advertisements, promotional banners, or unrelated links, you must identify it as a CRP if its primary purpose is to ask for a username, email, phone number, password, or any other form of login credential. This includes the first step of multi-step authentication processes where only a user identifier is requested. Respond with a JSON object containing a single boolean key: 'is_credential_page'."},
         {"role": "user", "content": text}
     ]
     response = await _query_openrouter(messages)
