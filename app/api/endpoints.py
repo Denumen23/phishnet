@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from app.services.fetch import get_html, get_screenshot
 from app.services.logo_matcher import ocr_brand_detector
-from app.services.llm import extract_text_from_html, is_credential_page_llm, identify_brand_llm
+from app.services.llm import get_relevant_content_from_html, is_credential_page_llm, identify_brand_llm, has_form_with_input, extract_text_from_html_content
 from app.services.brand_normalizer import brand_normalizer
 from app.services.domain_checker import domain_checker
 import os
@@ -58,45 +58,45 @@ async def analyze_url(request: AnalyzeRequest):
             logging.error(f"Failed to take screenshot: {e}")
             raise HTTPException(status_code=500, detail=f"Error during page screenshot: {e}")
 
-        text = extract_text_from_html(html_content)
-
-        logging.info("Step 1: Checking for credential-requiring page (CRP)...")
-        is_crp = await is_credential_page_llm(text)
-        logging.info(f"Is CRP? {is_crp}")
-
-        score = 0
+        is_crp = False
         identified_brand_alias_llm = None
         canonical_brand_llm = None
         is_legitimate_domain = None
-
-        if is_crp:
-            score += 20
-            logging.info("Step 2a: CRP detected. Identifying brand from text...")
-            identified_brand_alias_llm = await identify_brand_llm(text)
-            logging.info(f"LLM identified brand alias: '{identified_brand_alias_llm}'")
-            if identified_brand_alias_llm:
-                canonical_brand_llm = brand_normalizer.normalize_brand(identified_brand_alias_llm)
-                logging.info(f"Normalized to canonical brand: '{canonical_brand_llm}'")
-
-        logging.info("Step 2b: Identifying brand from image via OCR...")
-        found_brand_alias_ocr = ocr_brand_detector.find_brand_in_image(screenshot_path)
-        logging.info(f"OCR found brand alias: '{found_brand_alias_ocr}'")
+        found_brand_alias_ocr = None
         canonical_brand_ocr = None
-        if found_brand_alias_ocr:
-            canonical_brand_ocr = brand_normalizer.normalize_brand(found_brand_alias_ocr)
-            logging.info(f"Normalized to canonical brand: '{canonical_brand_ocr}'")
+        score = 0
 
-        final_canonical_brand = canonical_brand_llm or canonical_brand_ocr
-        logging.info(f"Final canonical brand for domain check: '{final_canonical_brand}'")
+        # Step 1: Deterministic check for a form with an input field.
+        if has_form_with_input(html_content):
+            # Step 2: If a form is found, get its HTML and ask the LLM for a nuanced analysis.
+            relevant_content = get_relevant_content_from_html(html_content)
+            logging.info("Form found. Sending to LLM for credential analysis...")
+            is_crp = await is_credential_page_llm(relevant_content)
 
-        if is_crp and final_canonical_brand:
-            logging.info("Step 3: Performing domain legitimacy check...")
-            is_legitimate_domain = domain_checker.is_legitimate_domain(url, final_canonical_brand)
-            logging.info(f"Is domain legitimate for '{final_canonical_brand}'? {is_legitimate_domain}")
-            if not is_legitimate_domain:
-                score = 95
-            else:
-                score = 5
+            if is_crp:
+                score = 20  # Base score for being a CRP
+                logging.info("Step 2a: CRP detected. Identifying brand from text...")
+                form_text = extract_text_from_html_content(relevant_content)
+                identified_brand_alias_llm = await identify_brand_llm(form_text)
+                if identified_brand_alias_llm:
+                    canonical_brand_llm = brand_normalizer.normalize_brand(identified_brand_alias_llm)
+
+                logging.info("Step 2b: Identifying brand from image via OCR...")
+                found_brand_alias_ocr = ocr_brand_detector.find_brand_in_image(screenshot_path)
+                if found_brand_alias_ocr:
+                    canonical_brand_ocr = brand_normalizer.normalize_brand(found_brand_alias_ocr)
+
+                final_canonical_brand = canonical_brand_llm or canonical_brand_ocr
+                if final_canonical_brand:
+                    logging.info("Step 3: Performing domain legitimacy check...")
+                    is_legitimate_domain = domain_checker.is_legitimate_domain(url, final_canonical_brand)
+                    if not is_legitimate_domain:
+                        score = 95  # High score for phishing
+                    else:
+                        score = 5  # Low score for legitimate
+        else:
+            # If no form is found, we can be reasonably sure it's not a CRP.
+            logging.info("No form with input found. Skipping LLM analysis.")
 
         final_score = min(score, 100)
         logging.info(f"Final phishing score for {url}: {final_score}")

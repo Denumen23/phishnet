@@ -4,33 +4,51 @@ from app.core.config import OPENROUTER_API_KEY, OPENROUTER_MODEL_NAME
 import json
 import asyncio
 
-def extract_text_from_html(html: str) -> str:
+def get_relevant_content_from_html(html: str) -> str:
     """
-    Extracts visible text from HTML content, prioritizing text within <form> tags.
-    If no <form> tags are found, it falls back to extracting text from the entire page.
+    Extracts relevant content from HTML for LLM analysis.
+    It prioritizes returning the full HTML of <form> tags if they exist.
+    If not, it extracts clean text from the entire page as a fallback.
     """
     soup = BeautifulSoup(html, 'html.parser')
 
-    # Remove script and style elements
+    # Remove script and style elements to clean up the source
     for script in soup(["script", "style"]):
         script.extract()
 
-    # Prioritize extracting text from <form> tags
     forms = soup.find_all('form')
     if forms:
-        form_text = ""
-        for form in forms:
-            form_text += form.get_text(separator=' ')
-
-        text = form_text
+        # If forms are found, return their full HTML content
+        return "\n".join(str(form) for form in forms)
     else:
-        # Fallback to the entire page if no forms are found
+        # Fallback: get clean text from the entire body
         text = soup.get_text(separator=' ')
+        lines = (line.strip() for line in text.splitlines())
+        chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
+        return '\n'.join(chunk for chunk in chunks if chunk)
 
+def has_form_with_input(html: str) -> bool:
+    """
+    Deterministically checks if the HTML contains a <form> with at least one <input>.
+    """
+    soup = BeautifulSoup(html, 'html.parser')
+    forms = soup.find_all('form')
+    for form in forms:
+        if form.find('input'):
+            return True
+    return False
+
+def extract_text_from_html_content(html: str) -> str:
+    """
+    Extracts plain text from an HTML string.
+    """
+    soup = BeautifulSoup(html, 'html.parser')
+    for script in soup(["script", "style"]):
+        script.extract()
+    text = soup.get_text()
     lines = (line.strip() for line in text.splitlines())
     chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
-    text = '\n'.join(chunk for chunk in chunks if chunk)
-    return text
+    return '\n'.join(chunk for chunk in chunks if chunk)
 
 async def _query_openrouter(messages: list) -> dict:
     """
@@ -60,13 +78,17 @@ async def _query_openrouter(messages: list) -> dict:
         except Exception as e:
             return {"status": "error", "message": str(e)}
 
-async def is_credential_page_llm(text: str) -> bool:
+# Load the prompt from the markdown file
+with open('app/services/data/CRP.md', 'r') as f:
+    CRP_PROMPT = f.read()
+
+async def is_credential_page_llm(form_html: str) -> bool:
     """
-    Determines if the text content suggests a credential-requiring page (CRP).
+    Analyzes the HTML of a form to determine if it's a credential-requiring page (CRP).
     """
     messages = [
-        {"role": "system", "content": "You are a cybersecurity assistant. Your task is to determine if the provided webpage text indicates a credential-requiring page (CRP). A CRP is a login form, a sign-in page, or any page that requests user credentials. Focus on identifying the core user intent of the page. Even if the page contains distracting elements like advertisements, promotional banners, or unrelated links, you must identify it as a CRP if its primary purpose is to ask for a username, email, phone number, password, or any other form of login credential. This includes the first step of multi-step authentication processes where only a user identifier is requested. Respond with a JSON object containing a single boolean key: 'is_credential_page'."},
-        {"role": "user", "content": text}
+        {"role": "system", "content": CRP_PROMPT},
+        {"role": "user", "content": form_html}
     ]
     response = await _query_openrouter(messages)
     return response.get('is_credential_page', False)
@@ -76,43 +98,9 @@ async def identify_brand_llm(text: str) -> str | None:
     Identifies the brand being impersonated on a credential-requiring page.
     """
     messages = [
-        {"role": "system", "content": "You are a brand detection assistant. Analyze the text from a login page. Identify the primary brand being represented or impersonated. The brand could be a company (e.g., 'Microsoft'), a service (e.g., 'Gmail'), or a product (e.g., 'Office 365'). Respond with a JSON object with a single key: 'brand_name'. If no specific brand can be identified, return 'Unknown'."},
+        {"role": "system", "content": "You are a brand detection assistant. Analyze the text from a login page. Identify the primary brand being represented or impersonated. The brand could be a company (e.g., 'Microsoft'), a service (e.g., 'Gmail'), or a product (e.g., 'Office 350'). Respond with a JSON object with a single key: 'brand_name'. If no specific brand can be identified, return 'Unknown'."},
         {"role": "user", "content": text}
     ]
     response = await _query_openrouter(messages)
     brand_name = response.get('brand_name')
     return brand_name if brand_name and brand_name.lower() != 'unknown' else None
-
-async def main():
-    # Example usage
-    sample_html = """
-    <html>
-        <body>
-            <h1>Sign in to your account</h1>
-            <p>We've detected suspicious activity on your Microsoft account. Please verify your identity to avoid your account being locked.</p>
-            <form>
-                <label>Email:</label><br>
-                <input type="text"><br>
-                <label>Password:</label><br>
-                <input type="password"><br>
-                <input type="submit" value="Login to Microsft">
-            </form>
-        </body>
-    </html>
-    """
-
-    extracted_text = extract_text_from_html(sample_html)
-    print("Extracted Text:")
-    print(extracted_text)
-
-    print("\nChecking if it's a credential page...")
-    is_crp = await is_credential_page_llm(extracted_text)
-    print(f"Is Credential Page: {is_crp}")
-
-    if is_crp:
-        print("\nIdentifying brand...")
-        brand = await identify_brand_llm(extracted_text)
-        print(f"Identified Brand: {brand}")
-
-if __name__ == '__main__':
-    asyncio.run(main())
