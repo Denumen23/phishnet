@@ -1,0 +1,27 @@
+# Git
+.git
+.gitignore
+
+# Docker
+Dockerfile
+.dockerignore
+
+# Environment
+.env*
+
+# Python caches
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+.pytest_cache
+
+# Build artifacts
+dist/
+build/
+*.egg-info
+
+# Logs and screenshots from local testing
+*.log
+*.png
