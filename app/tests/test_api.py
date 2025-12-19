@@ -18,7 +18,7 @@ def test_legitimate_login_page(
     """
     Tests a legitimate login page, which should result in a low phishing score.
     """
-    mock_get_html.return_value = "<html><body>Sign in to Microsoft</body></html>"
+    mock_get_html.return_value = "<html><body><form>Sign in to Microsoft</form></body></html>"
     mock_get_screenshot.return_value = None
     mock_is_crp.return_value = True
     mock_identify_brand.return_value = "Microsoft"
@@ -46,7 +46,7 @@ def test_phishing_page_on_mismatched_domain(
     """
     Tests a phishing page on a mismatched domain, which should result in a high phishing score.
     """
-    mock_get_html.return_value = "<html><body>Sign in to Microsoft</body></html>"
+    mock_get_html.return_value = "<html><body><form>Sign in to Microsoft</form></body></html>"
     mock_get_screenshot.return_value = None
     mock_is_crp.return_value = True
     mock_identify_brand.return_value = "Microsoft"
@@ -80,7 +80,7 @@ def test_multistep_login_is_crp(mock_get_html, mock_is_crp):
     Tests that a multi-step login page (e.g., asking for username first) is identified as a CRP.
     """
     # This HTML simulates the first step of a login, asking for an email/username.
-    mock_get_html.return_value = "<html><body><h1>Sign in</h1><p>Enter your email address to continue.</p><input type='email' /></body></html>"
+    mock_get_html.return_value = "<html><body><form><h1>Sign in</h1><p>Enter your email address to continue.</p><input type='email' /></form></body></html>"
     mock_is_crp.return_value = True # The updated prompt should now return True for this.
 
     response = client.post("/analyze", json={"url": "https://example.com/login-step-one"})

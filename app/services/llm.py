@@ -6,12 +6,27 @@ import asyncio
 
 def extract_text_from_html(html: str) -> str:
     """
-    Extracts visible text from HTML content.
+    Extracts visible text from HTML content, prioritizing text within <form> tags.
+    If no <form> tags are found, it falls back to extracting text from the entire page.
     """
     soup = BeautifulSoup(html, 'html.parser')
+
+    # Remove script and style elements
     for script in soup(["script", "style"]):
         script.extract()
-    text = soup.get_text()
+
+    # Prioritize extracting text from <form> tags
+    forms = soup.find_all('form')
+    if forms:
+        form_text = ""
+        for form in forms:
+            form_text += form.get_text(separator=' ')
+
+        text = form_text
+    else:
+        # Fallback to the entire page if no forms are found
+        text = soup.get_text(separator=' ')
+
     lines = (line.strip() for line in text.splitlines())
     chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
     text = '\n'.join(chunk for chunk in chunks if chunk)
