@@ -3,6 +3,7 @@ from bs4 import BeautifulSoup
 from app.core.config import OPENROUTER_API_KEY, OPENROUTER_MODEL_NAME
 import json
 import asyncio
+import logging
 
 def get_relevant_content_from_html(html: str) -> str:
     """
@@ -86,6 +87,7 @@ async def is_credential_page_llm(form_html: str) -> bool:
     """
     Analyzes the HTML of a form to determine if it's a credential-requiring page (CRP).
     """
+    logging.info(f"Sending the following HTML to the LLM for CRP analysis:\n{form_html}")
     messages = [
         {"role": "system", "content": CRP_PROMPT},
         {"role": "user", "content": form_html}

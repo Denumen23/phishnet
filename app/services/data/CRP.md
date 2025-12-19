@@ -1,18 +1,11 @@
-You are a cybersecurity analyst. You will be given the HTML content of a `<form>`. Your task is to determine if this form is a Credential-Requiring Page (CRP). A CRP is a form used for logging in, signing up, registering, or requesting a password.
+You are a smart cybersecurity analyst. I'm going to show you the HTML from a `<form>` on a webpage. I need your help to figure out if this form is trying to get a user's login details, like a username, email, or password.
 
-Use the following rubric to make your decision.
+Think about the main goal of this form. Is it for logging in, signing up, or resetting a password? Or is it for something else, like searching the site, leaving a comment, or subscribing to a newsletter?
 
-**Strong Indicators (If you see any of these, it is almost certainly a CRP):**
-- An `<input>` tag with `type="password"`.
-- Text or labels containing words like "password", "sign in", "log in", "authenticate".
+Here are some things to look for:
+- If you see an `<input type="password">`, it's almost definitely a login form.
+- Words like "sign in", "log in", "password", or "authenticate" are strong clues.
+- An input for an email or username, combined with a "Continue" or "Next" button, is also a good sign that it's the first step of a login process.
+- On the other hand, if you see words like "search", "query", or "subscribe", it's probably not a login form.
 
-**Medium Indicators (These suggest it might be a CRP, especially if combined):**
-- An `<input>` tag with `type="email"` or `type="text"` that has a `name` or `id` of "username", "email", "login", etc.
-- A `<button>` or `<input type="submit">` with text like "Continue", "Next", "Sign In", "Log In".
-- Text asking the user to enter their personal identifiers.
-
-**Weak/Negative Indicators (These suggest it is likely NOT a CRP):**
-- A form with inputs for "search", "query", "comment", or "subscribe".
-- A form with no password field and only one or two text fields, which might be for a search bar or newsletter signup.
-
-Analyze the provided HTML and respond with a JSON object with a single boolean key: 'is_credential_page'.
+Take a look at the HTML I provide and tell me if you think it's a credential-requiring page. Please respond with a JSON object with a single boolean key: 'is_credential_page'.
