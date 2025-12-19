@@ -7,13 +7,13 @@ client = TestClient(app)
 
 @patch('app.api.endpoints.domain_checker')
 @patch('app.api.endpoints.brand_normalizer')
+@patch('app.api.endpoints.ocr_brand_detector')
 @patch('app.api.endpoints.identify_brand_llm', new_callable=AsyncMock)
 @patch('app.api.endpoints.is_credential_page_llm', new_callable=AsyncMock)
-@patch('app.api.endpoints.find_logo')
 @patch('app.api.endpoints.get_screenshot', new_callable=AsyncMock)
 @patch('app.api.endpoints.get_html', new_callable=AsyncMock)
 def test_legitimate_login_page(
-    mock_get_html, mock_get_screenshot, mock_find_logo, mock_is_crp, mock_identify_brand, mock_normalizer, mock_domain_checker
+    mock_get_html, mock_get_screenshot, mock_is_crp, mock_identify_brand, mock_ocr, mock_normalizer, mock_domain_checker
 ):
     """
     Tests a legitimate login page, which should result in a low phishing score.
@@ -22,7 +22,7 @@ def test_legitimate_login_page(
     mock_get_screenshot.return_value = None
     mock_is_crp.return_value = True
     mock_identify_brand.return_value = "Microsoft"
-    mock_find_logo.return_value = "Microsoft"
+    mock_ocr.find_brand_in_image.return_value = "Microsoft"
     mock_normalizer.normalize_brand.return_value = "Microsoft"
     mock_domain_checker.is_legitimate_domain.return_value = True
 
@@ -35,13 +35,13 @@ def test_legitimate_login_page(
 
 @patch('app.api.endpoints.domain_checker')
 @patch('app.api.endpoints.brand_normalizer')
+@patch('app.api.endpoints.ocr_brand_detector')
 @patch('app.api.endpoints.identify_brand_llm', new_callable=AsyncMock)
 @patch('app.api.endpoints.is_credential_page_llm', new_callable=AsyncMock)
-@patch('app.api.endpoints.find_logo')
 @patch('app.api.endpoints.get_screenshot', new_callable=AsyncMock)
 @patch('app.api.endpoints.get_html', new_callable=AsyncMock)
 def test_phishing_page_on_mismatched_domain(
-    mock_get_html, mock_get_screenshot, mock_find_logo, mock_is_crp, mock_identify_brand, mock_normalizer, mock_domain_checker
+    mock_get_html, mock_get_screenshot, mock_is_crp, mock_identify_brand, mock_ocr, mock_normalizer, mock_domain_checker
 ):
     """
     Tests a phishing page on a mismatched domain, which should result in a high phishing score.
@@ -50,7 +50,7 @@ def test_phishing_page_on_mismatched_domain(
     mock_get_screenshot.return_value = None
     mock_is_crp.return_value = True
     mock_identify_brand.return_value = "Microsoft"
-    mock_find_logo.return_value = "Microsoft"
+    mock_ocr.find_brand_in_image.return_value = "Microsoft"
     mock_normalizer.normalize_brand.return_value = "Microsoft"
     mock_domain_checker.is_legitimate_domain.return_value = False
 

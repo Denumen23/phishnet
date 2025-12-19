@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from app.services.fetch import get_html, get_screenshot
-from app.services.logo_matcher import find_logo
+from app.services.logo_matcher import ocr_brand_detector
 from app.services.llm import extract_text_from_html, is_credential_page_llm, identify_brand_llm
 from app.services.brand_normalizer import brand_normalizer
 from app.services.domain_checker import domain_checker
@@ -18,15 +18,18 @@ class LLMAnalysis(BaseModel):
     identified_brand_alias: str | None
     canonical_brand: str | None
 
+class ImageAnalysis(BaseModel):
+    found_brand_alias: str | None
+    canonical_brand: str | None
+
 class DomainAnalysis(BaseModel):
     is_legitimate: bool | None
 
 class AnalyzeResponse(BaseModel):
     url: str
     phishing_score: float
-    matched_brand_logo_alias: str | None
-    canonical_brand_logo: str | None
     llm_analysis: LLMAnalysis
+    image_analysis: ImageAnalysis
     domain_analysis: DomainAnalysis
 
 @router.post("/analyze", response_model=AnalyzeResponse)
@@ -50,42 +53,41 @@ async def analyze_url(request: AnalyzeRequest):
         is_crp = await is_credential_page_llm(text)
 
         score = 0
-        identified_brand_alias = None
+        identified_brand_alias_llm = None
         canonical_brand_llm = None
         is_legitimate_domain = None
 
         if is_crp:
-            score += 20 # Base score for being a credential page
-            identified_brand_alias = await identify_brand_llm(text)
-            if identified_brand_alias:
-                canonical_brand_llm = brand_normalizer.normalize_brand(identified_brand_alias)
+            score += 20
+            identified_brand_alias_llm = await identify_brand_llm(text)
+            if identified_brand_alias_llm:
+                canonical_brand_llm = brand_normalizer.normalize_brand(identified_brand_alias_llm)
 
-        matched_brand_logo_alias = find_logo(screenshot_path)
-        canonical_brand_logo = None
-        if matched_brand_logo_alias:
-            canonical_brand_logo = brand_normalizer.normalize_brand(matched_brand_logo_alias)
+        found_brand_alias_ocr = ocr_brand_detector.find_brand_in_image(screenshot_path)
+        canonical_brand_ocr = None
+        if found_brand_alias_ocr:
+            canonical_brand_ocr = brand_normalizer.normalize_brand(found_brand_alias_ocr)
 
-        # Determine the final canonical brand from either source
-        final_canonical_brand = canonical_brand_llm or canonical_brand_logo
+        final_canonical_brand = canonical_brand_llm or canonical_brand_ocr
 
         if is_crp and final_canonical_brand:
             is_legitimate_domain = domain_checker.is_legitimate_domain(url, final_canonical_brand)
             if not is_legitimate_domain:
-                # This is the strongest signal for phishing
                 score = 95
             else:
-                # If the domain is legitimate, it's very unlikely to be phishing
                 score = 5
 
         return AnalyzeResponse(
             url=url,
             phishing_score=min(score, 100),
-            matched_brand_logo_alias=matched_brand_logo_alias,
-            canonical_brand_logo=canonical_brand_logo,
             llm_analysis=LLMAnalysis(
                 is_credential_page=is_crp,
-                identified_brand_alias=identified_brand_alias,
+                identified_brand_alias=identified_brand_alias_llm,
                 canonical_brand=canonical_brand_llm
+            ),
+            image_analysis=ImageAnalysis(
+                found_brand_alias=found_brand_alias_ocr,
+                canonical_brand=canonical_brand_ocr
             ),
             domain_analysis=DomainAnalysis(is_legitimate=is_legitimate_domain)
         )

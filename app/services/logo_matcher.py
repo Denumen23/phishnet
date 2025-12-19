@@ -1,75 +1,76 @@
-import cv2
-import numpy as np
-import os
+from PIL import Image
+import pytesseract
+import json
+from pathlib import Path
 
-def find_logo(screenshot_path: str, logo_dir: str = "app/services/data/logos") -> str | None:
-    """
-    Finds a matching logo from the logo directory in the given screenshot using ORB.
-    """
-    try:
-        screenshot = cv2.imread(screenshot_path, 0)
-        if screenshot is None:
-            raise FileNotFoundError(f"Could not read screenshot image at {screenshot_path}")
-    except Exception as e:
-        print(f"Error reading screenshot: {e}")
-        return None
+class OcrBrandDetector:
+    _instance = None
+    _brand_aliases = set()
 
-    orb = cv2.ORB_create(nfeatures=1000)
-    kp1, des1 = orb.detectAndCompute(screenshot, None)
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super(OcrBrandDetector, cls).__new__(cls)
+            cls._instance._load_kb()
+        return cls._instance
 
-    if des1 is None:
-        print("Could not find features in the screenshot.")
-        return None
-
-    for logo_file in os.listdir(logo_dir):
-        logo_path = os.path.join(logo_dir, logo_file)
+    def _load_kb(self):
+        """Loads brand aliases from the knowledge base."""
+        kb_path = Path(__file__).parent / "data" / "brand_kb.json"
         try:
-            logo = cv2.imread(logo_path, 0)
-            if logo is None:
-                raise FileNotFoundError(f"Could not read logo image at {logo_path}")
+            with open(kb_path, 'r') as f:
+                brand_data = json.load(f)
+
+            for brand in brand_data:
+                for alias in brand['aliases']:
+                    self._brand_aliases.add(alias.lower())
+        except (FileNotFoundError, json.JSONDecodeError) as e:
+            print(f"Error loading brand knowledge base: {e}")
+            self._brand_aliases = set()
+
+    def find_brand_in_image(self, screenshot_path: str) -> str | None:
+        """
+        Performs OCR on an image and checks for the presence of known brand aliases.
+
+        Args:
+            screenshot_path: The path to the screenshot image.
+
+        Returns:
+            The first brand alias found in the image, or None.
+        """
+        try:
+            # Perform OCR on the image to get all text
+            image_text = pytesseract.image_to_string(Image.open(screenshot_path)).lower()
+
+            # Check if any of the known brand aliases are in the OCR text
+            for alias in self._brand_aliases:
+                if alias in image_text:
+                    print(f"Found brand alias via OCR: {alias}")
+                    return alias
         except Exception as e:
-            print(f"Warning: {e}")
-            continue
+            print(f"Error during OCR processing: {e}")
 
-        kp2, des2 = orb.detectAndCompute(logo, None)
+        return None
 
-        if des2 is None:
-            print(f"Could not find features in logo {logo_file}.")
-            continue
-
-        bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
-
-        if des1.dtype != des2.dtype:
-            print(f"Descriptor types for screenshot and {logo_file} do not match.")
-            continue
-
-        matches = bf.match(des1, des2)
-        matches = sorted(matches, key=lambda x: x.distance)
-
-        # Use a ratio test or a fixed number of good matches
-        good_matches = [m for m in matches if m.distance < 75]
-
-        print(f"Found {len(good_matches)} good matches for {logo_file}.")
-
-        if len(good_matches) > 10:  # Threshold for a good match
-            return logo_file.split('.')[0]
-
-    return None
+# Singleton instance
+ocr_brand_detector = OcrBrandDetector()
 
 if __name__ == '__main__':
+    # This test requires a screenshot to be present
+    # As a simple test, we assume a file 'google_test.png' exists
+    from app.services.fetch import get_screenshot
     import asyncio
-    from fetch import get_screenshot
 
-    test_url = "https://www.google.com"
-    screenshot_file = "google_screenshot.png"
+    async def test_ocr_detector():
+        # Positive case
+        url = "https://www.google.com"
+        screenshot_file = "google_ocr_test.png"
+        print(f"Taking screenshot of {url}...")
+        await get_screenshot(url, screenshot_file)
+        print("Finding brand in image via OCR...")
+        brand = ocr_brand_detector.find_brand_in_image(screenshot_file)
+        if brand:
+            print(f"SUCCESS: Found brand '{brand}' on {url}")
+        else:
+            print(f"FAILURE: Did not find a brand on {url}")
 
-    print("Taking screenshot...")
-    asyncio.run(get_screenshot(test_url, screenshot_file))
-    print("Screenshot taken.")
-
-    print("Finding logo...")
-    matched_brand = find_logo(screenshot_file)
-    if matched_brand:
-        print(f"Logo matched: {matched_brand}")
-    else:
-        print("No logo matched.")
+    asyncio.run(test_ocr_detector())
