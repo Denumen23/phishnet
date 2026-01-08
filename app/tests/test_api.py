@@ -18,7 +18,7 @@ def test_legitimate_login_page(
     """
     Tests a legitimate login page, which should result in a low phishing score.
     """
-    mock_get_html.return_value = "<html><body>Sign in to Microsoft</body></html>"
+    mock_get_html.return_value = "<html><body><form><input type='text' name='username'/><input type='password' name='password'/>Sign in to Microsoft</form></body></html>"
     mock_get_screenshot.return_value = None
     mock_is_crp.return_value = True
     mock_identify_brand.return_value = "Microsoft"
@@ -46,7 +46,7 @@ def test_phishing_page_on_mismatched_domain(
     """
     Tests a phishing page on a mismatched domain, which should result in a high phishing score.
     """
-    mock_get_html.return_value = "<html><body>Sign in to Microsoft</body></html>"
+    mock_get_html.return_value = "<html><body><form><input type='text' name='username'/><input type='password' name='password'/>Sign in to Microsoft</form></body></html>"
     mock_get_screenshot.return_value = None
     mock_is_crp.return_value = True
     mock_identify_brand.return_value = "Microsoft"
@@ -72,3 +72,52 @@ def test_analyze_url_fetch_fails(mock_get_html):
 
     assert response.status_code == 400
     assert "Could not fetch HTML" in response.json()['detail']
+
+@patch('app.api.endpoints.is_credential_page_llm', new_callable=AsyncMock)
+@patch('app.api.endpoints.get_html', new_callable=AsyncMock)
+def test_multistep_login_is_crp(mock_get_html, mock_is_crp):
+    """
+    Tests that a multi-step login page (e.g., asking for username first) is identified as a CRP.
+    """
+    # This HTML simulates the first step of a login, asking for an email/username.
+    mock_get_html.return_value = "<html><body><form><h1>Sign in</h1><p>Enter your email address to continue.</p><input type='email' name='username'/></form></body></html>"
+    mock_is_crp.return_value = True # The updated prompt should now return True for this.
+
+    response = client.post("/analyze", json={"url": "https://example.com/login-step-one"})
+
+    mock_is_crp.assert_awaited_once()
+
+@patch('app.api.endpoints.is_credential_page_llm', new_callable=AsyncMock)
+@patch('app.api.endpoints.get_html', new_callable=AsyncMock)
+def test_complex_login_page_is_crp(mock_get_html, mock_is_crp):
+    """
+    Tests that a complex login page with distracting text is still identified as a CRP.
+    """
+    # This HTML simulates a noisy login page with promotional content.
+    mock_get_html.return_value = """
+    <html>
+        <body>
+            <header>
+                <h1>My Store</h1>
+                <nav>Home | Products | Sale</nav>
+            </header>
+            <main>
+                <h2>Weekend Sale! 50% off!</h2>
+                <form>
+                    <h3>Login to your account</h3>
+                    <label>Email:</label>
+                    <input type="email" name="login-email"/>
+                    <button>Continue</button>
+                </form>
+            </main>
+            <footer>
+                <p>About Us | Contact | FAQ</p>
+            </footer>
+        </body>
+    </html>
+    """
+    mock_is_crp.return_value = True  # The refined prompt should identify this as a CRP.
+
+    response = client.post("/analyze", json={"url": "https://example.com/complex-login"})
+
+    mock_is_crp.assert_awaited_once()
